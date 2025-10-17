@@ -367,13 +367,7 @@ Ensure adequate disk space:
 
 5. **Rate limit errors**
    - Script will automatically retry (up to 3 times)
-   - Consider increasing `DELAY_BETWEEN_USERS`
    - May need to spread processing over multiple days
-
-6. **Disk space issues**
-   - Monitor available space during operation
-   - Consider changing `ARCHIVE_BASE_DIR` to larger volume
-   - Clean up old archives if needed
 
 ### Debug Mode
 
@@ -394,86 +388,6 @@ Search for errors:
 grep ERROR logs/archive_*.log
 ```
 
-## Maintenance
-
-### Regular Tasks
-
-1. **Monitor disk space**
-   ```bash
-   df -h archives/
-   ```
-
-2. **Clean old archives** (after verification)
-   ```bash
-   find archives/ -name "*.tar.gz" -mtime +365 -ls
-   ```
-
-3. **Verify archive integrity**
-   ```bash
-   tar -tzf archives/user@domain.com_*.tar.gz > /dev/null
-   ```
-
-4. **Review logs for errors**
-   ```bash
-   grep -i error logs/*.log
-   ```
-
-### Restoring from Archive
-
-To restore a user's data:
-```bash
-# Extract archive
-tar -xzf archives/user@domain.com_20241016_143045.tar.gz -C /tmp/restore
-
-# Use GYB to restore (uses your configured GYB settings)
-gyb --email user@domain.com --action restore --local-folder /tmp/restore/user@domain.com
-```
-
-GYB will use its configured service account automatically from `~/.gam/` or your `GAMCFGDIR` location.
-
-## Automation
-
-### Cron Job Example
-
-Run weekly on Sunday at 2 AM:
-```bash
-0 2 * * 0 /path/to/archive-workspace-users.sh >> /var/log/archive-cron.log 2>&1
-```
-
-### Systemd Timer Example
-
-Create `/etc/systemd/system/workspace-archive.service`:
-```ini
-[Unit]
-Description=Google Workspace User Archive
-
-[Service]
-Type=oneshot
-ExecStart=/path/to/archive-workspace-users.sh
-User=backup
-# Optional: Set custom GAM config directory
-# Environment="GAMCFGDIR=/home/backup/.gam"
-```
-
-Create `/etc/systemd/system/workspace-archive.timer`:
-```ini
-[Unit]
-Description=Weekly Google Workspace Archive
-
-[Timer]
-OnCalendar=Sun 02:00
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-```
-
-Enable:
-```bash
-systemctl enable workspace-archive.timer
-systemctl start workspace-archive.timer
-```
-
 ## Best Practices
 
 1. **Review the Script**: Always review GAM commands in the script to verify read-only operations
@@ -481,14 +395,10 @@ systemctl start workspace-archive.timer
 3. **Test First**: Always run with `--dry-run` first
 4. **Single User Test**: Test with `--user` on a small mailbox
 5. **Monitor Initial Runs**: Watch logs during first few executions
-6. **Schedule Wisely**: Run during off-peak hours
-7. **Verify Backups**: Periodically test archive restoration
-8. **Document Changes**: Keep track of configuration changes
-9. **Regular Reviews**: Review logs and reports monthly
-10. **Disk Space**: Monitor and maintain adequate free space
-11. **Version Control**: Track script changes in git
-12. **Secure GAM Config**: Protect `~/.gam/` directory (chmod 700)
-13. **Keep Tools Updated**: Regularly update GAM and GYB
+6. **Verify Backups**: Periodically test archive restoration
+7. **Version Control**: Track script changes in git
+8. **Secure GAM Config**: Protect `~/.gam/` directory (chmod 700)
+9. **Keep Tools Updated**: Regularly update GAM and GYB
 
 ## Security Notes
 
