@@ -159,28 +159,6 @@ Archive all users in the default "FormerEmployees" OU:
    ./archive-workspace-users.sh --dry-run --ou "/FormerEmployees/2024"
    ```
 
-### Environment Variables
-
-Configure behavior using environment variables:
-
-```bash
-# Organizational unit path
-export FORMER_EMPLOYEES_OU="/FormerEmployees"
-
-# Custom directory locations
-export ARCHIVE_BASE_DIR="/mnt/backups/archives"
-export TEMP_DIR="/mnt/backups/temp"
-export LOG_DIR="/var/log/workspace-archives"
-export REPORT_DIR="/var/log/workspace-reports"
-
-# Custom tool paths (if not in PATH)
-export GAM_BIN="/usr/local/bin/gam"
-export GYB_BIN="/usr/local/bin/gyb"
-
-# GAM/GYB configuration directory (if using non-default location)
-export GAMCFGDIR="/opt/gam-config"
-```
-
 ## Directory Structure
 
 The script creates and manages the following directories:
