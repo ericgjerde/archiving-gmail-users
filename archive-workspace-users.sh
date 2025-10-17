@@ -65,7 +65,7 @@ LOG_DIR="${LOG_DIR:-${SCRIPT_DIR}/logs}"
 REPORT_DIR="${REPORT_DIR:-${SCRIPT_DIR}/reports}"
 
 # Rate limiting and performance
-DELAY_BETWEEN_USERS=30  # Seconds to wait between processing users
+DELAY_BETWEEN_USERS=0   # Seconds to wait between processing users (0 = no delay)
 RETRY_DELAY=60          # Seconds to wait before retrying after rate limit
 MAX_RETRIES=3           # Maximum number of retries for failed operations
 
@@ -567,39 +567,53 @@ monitor_gyb_progress() {
         return 0  # Log file never created, exit silently
     fi
 
-    # Monitor the log file for progress updates
-    tail -f "$gyb_log" 2>/dev/null | while IFS= read -r line; do
-        # Check if GYB has finished (log file will stop being updated)
+    # Poll the log file periodically for progress updates
+    # This avoids buffering issues with tail -f in background pipelines
+    while true; do
+        # Check if log file still exists (might be removed when done)
         if [[ ! -f "$gyb_log" ]]; then
             break
         fi
 
-        # Extract total message count when discovered
-        if [[ ! "$discovered" == "true" ]] && [[ "$line" =~ "GYB needs to backup "([0-9]+)" messages" ]]; then
-            total_messages="${BASH_REMATCH[1]}"
-            if [[ $total_messages -gt 0 ]]; then
-                discovered=true
-                log_message "INFO" "Found $total_messages message(s) to backup for $user_email"
-            fi
-        fi
-
-        # Extract progress from lines like "backed up 500 of 5925 messages"
-        if [[ "$line" =~ "backed up "([0-9]+)" of "([0-9]+)" messages" ]]; then
-            local current="${BASH_REMATCH[1]}"
-            local total="${BASH_REMATCH[2]}"
-
-            # Only report every 500 messages to avoid spam
-            if [[ $((current - last_reported)) -ge 500 ]] || [[ $current -eq $total ]]; then
-                local percent=$((current * 100 / total))
-                log_message "INFO" "Progress: $current/$total messages ($percent%)"
-                last_reported=$current
-
-                # If we've reached the total, stop monitoring
-                if [[ $current -eq $total ]]; then
-                    break
+        # Extract total message count if not yet discovered
+        if [[ ! "$discovered" == "true" ]]; then
+            if grep -q "GYB needs to backup" "$gyb_log" 2>/dev/null; then
+                local line
+                line=$(grep "GYB needs to backup" "$gyb_log" 2>/dev/null | tail -1)
+                if [[ "$line" =~ "GYB needs to backup "([0-9]+)" messages" ]]; then
+                    total_messages="${BASH_REMATCH[1]}"
+                    if [[ $total_messages -gt 0 ]]; then
+                        discovered=true
+                        log_message "INFO" "Found $total_messages message(s) to backup for $user_email" >&2
+                    fi
                 fi
             fi
         fi
+
+        # Extract latest progress line
+        if grep -q "backed up .* of .* messages" "$gyb_log" 2>/dev/null; then
+            local line
+            line=$(grep "backed up .* of .* messages" "$gyb_log" 2>/dev/null | tail -1)
+            if [[ "$line" =~ "backed up "([0-9]+)" of "([0-9]+)" messages" ]]; then
+                local current="${BASH_REMATCH[1]}"
+                local total="${BASH_REMATCH[2]}"
+
+                # Only report every 500 messages to avoid spam
+                if [[ $((current - last_reported)) -ge 500 ]] || [[ $current -eq $total ]]; then
+                    local percent=$((current * 100 / total))
+                    log_message "INFO" "Progress: $current/$total messages ($percent%)" >&2
+                    last_reported=$current
+
+                    # If we've reached the total, stop monitoring
+                    if [[ $current -eq $total ]]; then
+                        break
+                    fi
+                fi
+            fi
+        fi
+
+        # Check every 2 seconds
+        sleep 2
     done
 }
 
@@ -1006,8 +1020,8 @@ main() {
         # Process the user
         process_single_user "$email" || true
 
-        # Rate limiting delay (except for last user)
-        if [[ $user_count -lt $TOTAL_USERS ]]; then
+        # Rate limiting delay (except for last user, and only if delay is set)
+        if [[ $user_count -lt $TOTAL_USERS && $DELAY_BETWEEN_USERS -gt 0 ]]; then
             log_message "INFO" "Waiting ${DELAY_BETWEEN_USERS}s before next user (rate limiting)..."
             if [[ "$DRY_RUN" != "true" ]]; then
                 sleep "$DELAY_BETWEEN_USERS"
