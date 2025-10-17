@@ -6,8 +6,13 @@
 #
 # Description:
 #   Automates the archival of Google Workspace users who have been moved to
-#   a "FormerEmployees" organizational unit. Uses GYB (Got Your Back) to
-#   backup user data, compresses it, and generates comprehensive reports.
+#   a "FormerEmployees" organizational unit. Uses GAM (read-only) to discover
+#   users and GYB (Got Your Back) to backup user data, compresses it, and
+#   generates comprehensive reports.
+#
+# IMPORTANT: GAM is used ONLY for read-only operations (querying users in the
+#   target OU). This script makes NO modifications to your Google Workspace
+#   via GAM. Always review GAM commands in scripts before execution.
 #
 # Prerequisites:
 #   - Bash 4.0+
@@ -416,9 +421,10 @@ discover_users() {
     # Temporary file for user list
     local user_list_file="${TEMP_DIR}/users_${TIMESTAMP}.csv"
 
-    # Execute GAM command to list users
+    # Execute GAM command to list users (READ-ONLY operation)
     # Query for users in the specific OU and get their email and full name
     # OU path has been validated above to prevent injection
+    # This is the ONLY GAM command used by this script - it makes no modifications
     if ! $GAM_BIN print users query "orgUnitPath='${ou_path}'" fields primaryEmail,name.fullName > "$user_list_file" 2>> "$LOG_FILE"; then
         log_message "ERROR" "Failed to retrieve user list from GAM"
         return 1

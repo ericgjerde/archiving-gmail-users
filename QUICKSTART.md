@@ -2,6 +2,8 @@
 
 Get started with the Google Workspace User Archive script in 5 minutes.
 
+**IMPORTANT**: This script uses GAM **ONLY** for read-only user discovery (listing users in the target OU). GAM makes no modifications to your Workspace. Always review the GAM commands in the script to verify read-only operations before running.
+
 ## Prerequisites
 
 **IMPORTANT**: This script requires pre-installed and configured GAM and GYB. If you haven't set these up yet, stop here and configure them first. See the [GAM Installation Guide](https://github.com/GAM-team/GAM) and [GYB Installation Guide](https://github.com/GAM-team/got-your-back).
@@ -115,7 +117,7 @@ Once the single user test succeeds:
 ```
 
 The script will:
-1. Query GAM for all users in the FormerEmployees OU
+1. Query GAM for all users in the FormerEmployees OU (read-only operation)
 2. Display the list of users
 3. **Ask you to type the exact OU path** to confirm (security feature)
 4. Process each user sequentially (with 30s delay between users)
@@ -316,6 +318,7 @@ The script includes multiple layers of security and safety:
 - ✅ Can be safely interrupted with Ctrl+C
 
 **Operational Safety:**
+- ✅ GAM used ONLY for read-only operations (querying users in target OU)
 - ✅ Uses existing GAM/GYB configuration (doesn't manage credentials)
 - ✅ Skips already archived users (resume capability)
 - ✅ Continues on individual user failures

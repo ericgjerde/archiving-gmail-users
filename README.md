@@ -2,9 +2,11 @@
 
 A comprehensive bash script for automating the archival of Google Workspace users who have been moved to a "FormerEmployees" organizational unit.
 
+**IMPORTANT**: This script uses GAM **ONLY** for read-only user discovery (listing users in the target OU). GAM makes no modifications to your Workspace. Always review the GAM commands in the script to verify read-only operations before running.
+
 ## Features
 
-- Automated discovery of users in specified organizational units
+- Automated discovery of users in specified organizational units (GAM used read-only to query user lists)
 - Sequential backup using GYB (Got Your Back) with rate limiting
 - Automatic compression of backups into tar.gz archives
 - Resume capability (skips already archived users)
@@ -300,6 +302,12 @@ The script includes multiple layers of security protection:
 - Credentials stored in ~/.gam/ with proper permissions (700)
 - Service account files managed by GAM/GYB, not this script
 
+**GAM Read-Only Usage:**
+- GAM is used **ONLY** for read-only operations (querying users in target OU)
+- The only GAM command used: `gam print users query "orgUnitPath='...'" fields primaryEmail,name.fullName`
+- No modifications are made to your Google Workspace via GAM
+- Always review GAM commands in any script before execution
+
 ## Performance Considerations
 
 ### Expected Duration
@@ -468,18 +476,19 @@ systemctl start workspace-archive.timer
 
 ## Best Practices
 
-1. **Verify GAM/GYB First**: Ensure they work before running this script
-2. **Test First**: Always run with `--dry-run` first
-3. **Single User Test**: Test with `--user` on a small mailbox
-4. **Monitor Initial Runs**: Watch logs during first few executions
-5. **Schedule Wisely**: Run during off-peak hours
-6. **Verify Backups**: Periodically test archive restoration
-7. **Document Changes**: Keep track of configuration changes
-8. **Regular Reviews**: Review logs and reports monthly
-9. **Disk Space**: Monitor and maintain adequate free space
-10. **Version Control**: Track script changes in git
-11. **Secure GAM Config**: Protect `~/.gam/` directory (chmod 700)
-12. **Keep Tools Updated**: Regularly update GAM and GYB
+1. **Review the Script**: Always review GAM commands in the script to verify read-only operations
+2. **Verify GAM/GYB First**: Ensure they work before running this script
+3. **Test First**: Always run with `--dry-run` first
+4. **Single User Test**: Test with `--user` on a small mailbox
+5. **Monitor Initial Runs**: Watch logs during first few executions
+6. **Schedule Wisely**: Run during off-peak hours
+7. **Verify Backups**: Periodically test archive restoration
+8. **Document Changes**: Keep track of configuration changes
+9. **Regular Reviews**: Review logs and reports monthly
+10. **Disk Space**: Monitor and maintain adequate free space
+11. **Version Control**: Track script changes in git
+12. **Secure GAM Config**: Protect `~/.gam/` directory (chmod 700)
+13. **Keep Tools Updated**: Regularly update GAM and GYB
 
 ## Security Notes
 
