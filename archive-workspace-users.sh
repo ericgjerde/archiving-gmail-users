@@ -70,8 +70,22 @@ RETRY_DELAY=60          # Seconds to wait before retrying after rate limit
 MAX_RETRIES=3           # Maximum number of retries for failed operations
 
 # Tool paths (auto-detect if not set)
-GAM_BIN="${GAM_BIN:-$(command -v gam || echo "gam")}"
-GYB_BIN="${GYB_BIN:-$(command -v gyb || echo "gyb")}"
+# Default to simple command names - user can override with environment variables
+: "${GAM_BIN:=gam}"
+
+# Auto-detect GYB location if not set
+if [[ -z "${GYB_BIN:-}" ]]; then
+    # Try common GYB installation locations
+    if [[ -x "/usr/local/bin/gyb/gyb" ]]; then
+        GYB_BIN="/usr/local/bin/gyb/gyb"
+    elif [[ -x "/usr/local/bin/gyb" ]]; then
+        GYB_BIN="/usr/local/bin/gyb"
+    elif command -v gyb &> /dev/null; then
+        GYB_BIN="gyb"
+    else
+        GYB_BIN="gyb"  # fallback
+    fi
+fi
 
 # Script execution flags
 DRY_RUN=false
@@ -135,8 +149,8 @@ log_message() {
     # Log to file without color
     echo "[${timestamp}] [${level}] ${message}" >> "$LOG_FILE"
 
-    # Display to stdout with color
-    echo -e "${color}[${timestamp}] [${level}] ${message}${NC}"
+    # Display to stdout with color (using >&2 to avoid polluting function returns)
+    echo -e "${color}[${timestamp}] [${level}] ${message}${NC}" >&2
 }
 
 ###
@@ -280,20 +294,6 @@ check_dependencies() {
 
     local missing_deps=()
 
-    # Check for GAM
-    if ! command -v "$GAM_BIN" &> /dev/null; then
-        missing_deps+=("GAM (Google Apps Manager)")
-    else
-        log_message "SUCCESS" "GAM found at: $(command -v "$GAM_BIN")"
-    fi
-
-    # Check for GYB
-    if ! command -v "$GYB_BIN" &> /dev/null; then
-        missing_deps+=("GYB (Got Your Back)")
-    else
-        log_message "SUCCESS" "GYB found at: $(command -v "$GYB_BIN")"
-    fi
-
     # Check for required utilities
     for cmd in tar gzip bc tee; do
         if ! command -v "$cmd" &> /dev/null; then
@@ -301,18 +301,28 @@ check_dependencies() {
         fi
     done
 
-    # Verify GAM and GYB are actually functional (not just present)
-    # This will fail if they're not properly configured with OAuth credentials
+    # Verify GAM is functional
+    # This will fail if it's not properly configured with OAuth credentials
     log_message "INFO" "Verifying GAM configuration..."
     if ! $GAM_BIN version &> /dev/null; then
         log_message "ERROR" "GAM is not properly configured or accessible"
-        missing_deps+=("GAM (properly configured)")
+        log_message "ERROR" "Tried to run: $GAM_BIN"
+        missing_deps+=("GAM (Google Apps Manager)")
+    else
+        log_message "SUCCESS" "GAM verified: $GAM_BIN"
     fi
 
+    # Verify GYB is functional
     log_message "INFO" "Verifying GYB configuration..."
     if ! $GYB_BIN --version &> /dev/null; then
         log_message "ERROR" "GYB is not properly configured or accessible"
-        missing_deps+=("GYB (properly configured)")
+        log_message "ERROR" "Tried to run: $GYB_BIN"
+        log_message "ERROR" "If you have gyb aliased, set the actual path:"
+        log_message "ERROR" "  export GYB_BIN=/path/to/gyb"
+        log_message "ERROR" "Common locations: /usr/local/bin/gyb/gyb or /usr/local/bin/gyb"
+        missing_deps+=("GYB (Got Your Back)")
+    else
+        log_message "SUCCESS" "GYB verified: $GYB_BIN"
     fi
 
     # Report missing dependencies
@@ -383,7 +393,8 @@ validate_ou_path() {
 
     # Only allow safe characters: alphanumeric, /, -, _, and space
     # Explicitly reject quotes, backticks, semicolons, pipes, etc.
-    if [[ "$ou_path" =~ [\'\"\\;\|\&\$\`\(\)\<\>] ]]; then
+    local dangerous_chars='['\''";\|&$`()<>\\]'
+    if [[ "$ou_path" =~ $dangerous_chars ]]; then
         log_message "ERROR" "Invalid OU path: contains dangerous characters (quotes, semicolons, pipes, etc.)"
         return 1
     fi
@@ -425,7 +436,7 @@ discover_users() {
     # Query for users in the specific OU and get their email and full name
     # OU path has been validated above to prevent injection
     # This is the ONLY GAM command used by this script - it makes no modifications
-    if ! $GAM_BIN print users query "orgUnitPath='${ou_path}'" fields primaryEmail,name.fullName > "$user_list_file" 2>> "$LOG_FILE"; then
+    if ! $GAM_BIN print users query "orgUnitPath='${ou_path}'" fields primaryEmail,fullname > "$user_list_file" 2>> "$LOG_FILE"; then
         log_message "ERROR" "Failed to retrieve user list from GAM"
         return 1
     fi
@@ -464,12 +475,12 @@ confirm_processing() {
     echo ""
 
     # Display user list (skip header)
-    tail -n +2 "$user_list_file" | while IFS=',' read -r email fullname; do
+    while IFS=',' read -r email fullname; do
         # Remove quotes if present
         email=$(echo "$email" | tr -d '"')
         fullname=$(echo "$fullname" | tr -d '"')
         echo "  - $email ($fullname)"
-    done
+    done < <(tail -n +2 "$user_list_file" 2>/dev/null)
 
     echo ""
 
@@ -545,7 +556,7 @@ backup_user_data() {
     log_message "INFO" "Starting GYB backup for: $user_email (Attempt $retry_attempt/$MAX_RETRIES)"
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_message "INFO" "[DRY RUN] Would execute: $GYB_BIN --email $user_email --action backup --local-folder $user_temp_dir"
+        log_message "INFO" "[DRY RUN] Would execute: $GYB_BIN --email $user_email --service-account --action backup --local-folder $user_temp_dir"
         sleep 2  # Simulate some work
         return 0
     fi
@@ -553,12 +564,13 @@ backup_user_data() {
     # Create temporary directory for this user
     mkdir -p "$user_temp_dir"
 
-    # Execute GYB backup command
+    # Execute GYB backup command with service account for domain-wide delegation
     # Capture both stdout and stderr to log file
-    # GYB will use its own configured service account from ~/.gyb/ or GAMCFGDIR
+    # GYB will use its configured service account with domain-wide delegation
     local gyb_log="${LOG_DIR}/gyb_${user_email}_${TIMESTAMP}.log"
 
     if $GYB_BIN --email "$user_email" \
+                --service-account \
                 --action backup \
                 --local-folder "$user_temp_dir" \
                 >> "$gyb_log" 2>&1; then
