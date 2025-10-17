@@ -453,8 +453,8 @@ discover_users() {
 
     log_message "SUCCESS" "Found $TOTAL_USERS user(s) to process"
 
-    # Store user list path for later use
-    echo "$user_list_file"
+    # Store user list path in global variable
+    USER_LIST_FILE="$user_list_file"
     return 0
 }
 
@@ -973,15 +973,14 @@ main() {
         exit 0
     fi
 
-    # Discover users
-    local user_list_file
-    if ! user_list_file=$(discover_users); then
+    # Discover users (sets global USER_LIST_FILE variable)
+    if ! discover_users; then
         log_message "ERROR" "User discovery failed. Exiting."
         exit 1
     fi
 
     # Confirm with user before proceeding
-    if ! confirm_processing "$user_list_file"; then
+    if ! confirm_processing "$USER_LIST_FILE"; then
         log_message "INFO" "Operation cancelled by user"
         exit 0
     fi
@@ -1014,10 +1013,10 @@ main() {
                 sleep "$DELAY_BETWEEN_USERS"
             fi
         fi
-    done < <(tail -n +2 "$user_list_file")
+    done < <(tail -n +2 "$USER_LIST_FILE")
 
     # Clean up temporary user list file
-    rm -f "$user_list_file"
+    rm -f "$USER_LIST_FILE"
 
     # Generate final report
     log_separator "Processing Complete"
