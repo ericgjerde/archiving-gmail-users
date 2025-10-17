@@ -589,6 +589,14 @@ backup_user_data() {
 
         return 0
     else
+        # Check for mail service not enabled (user has no Gmail license)
+        if grep -qi "Mail service not enabled\|failedPrecondition" "$gyb_log"; then
+            log_message "WARN" "User $user_email has no Gmail license (mail service not enabled)"
+            log_message "WARN" "Skipping backup - mailbox may have been deleted when license was removed"
+            # Return special code 2 to indicate skip rather than failure
+            return 2
+        fi
+
         # Check for rate limit errors
         if grep -qi "rate limit\|quota\|429" "$gyb_log"; then
             log_message "WARN" "Rate limit detected for $user_email"
@@ -694,7 +702,16 @@ process_single_user() {
     fi
 
     # Execute GYB backup
-    if ! backup_user_data "$user_email"; then
+    backup_user_data "$user_email"
+    local backup_result=$?
+
+    if [[ $backup_result -eq 2 ]]; then
+        # User has no Gmail license - skip but don't fail
+        log_message "INFO" "Skipping $user_email (no Gmail license)"
+        ((SKIPPED_COUNT++))
+        return 0
+    elif [[ $backup_result -ne 0 ]]; then
+        # Actual backup failure
         log_message "ERROR" "Backup failed for: $user_email"
         ((FAILED_COUNT++))
         return 1
