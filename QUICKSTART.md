@@ -60,7 +60,7 @@ chmod 600 ~/.gam/*
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/ericgjerde/archiving-gmail-users.git
 cd archiving-gmail-users
 
 # Make script executable

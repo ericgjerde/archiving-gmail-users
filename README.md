@@ -99,7 +99,7 @@ If either command fails, you need to configure GAM/GYB before using this script.
 
 2. Clone or download this repository:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/ericgjerde/archiving-gmail-users.git
    cd archiving-gmail-users
    ```
 
