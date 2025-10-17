@@ -7,7 +7,8 @@ A comprehensive bash script for automating the archival of Google Workspace user
 ## Features
 
 - Automated discovery of users in specified organizational units (GAM used read-only to query user lists)
-- Sequential backup using GYB (Got Your Back) with rate limiting
+- Sequential backup using GYB (Got Your Back)
+- **Real-time progress monitoring** - Shows backup progress every 500 messages with percentage updates
 - Automatic compression of backups into tar.gz archives
 - Resume capability (skips already archived users)
 - Comprehensive logging with timestamps
@@ -15,7 +16,7 @@ A comprehensive bash script for automating the archival of Google Workspace user
 - Error handling with retry logic for rate limits
 - Dry-run mode for testing
 - Single user mode for targeted backups
-- Color-coded console output
+- **Solarized color-coded console output** for improved readability
 - Progress tracking and statistics
 - Enhanced security with input validation and audit logging
 - OU path validation to prevent command injection
@@ -255,12 +256,33 @@ The script automatically skips users who already have archives, allowing you to:
 - Re-run the script safely without duplicating work
 - Process new users added to the OU
 
+### Real-Time Progress Monitoring
+
+During GYB backups, the script displays real-time progress updates:
+```
+[INFO] Found 5925 message(s) to backup for user@example.com
+[INFO] Progress: 500/5925 messages (8%)
+[INFO] Progress: 1000/5925 messages (16%)
+[INFO] Progress: 1500/5925 messages (25%)
+...
+[INFO] Progress: 5710/5925 messages (96%)
+[SUCCESS] GYB backup completed for: user@example.com
+```
+
+Features:
+- Shows total message count when backup starts
+- Progress updates every 500 messages
+- Displays both count and percentage
+- No silent periods during long backups
+- Background monitoring doesn't interfere with GYB
+
 ### Rate Limiting
 
-- **Default delay**: 30 seconds between users
+- **Default delay**: 0 seconds (no delay between users for maximum speed)
 - **Retry logic**: Automatically retries on rate limit errors
 - **Max retries**: 3 attempts per user
-- **Exponential backoff**: 60 second delay on rate limit detection
+- **Backoff**: 60 second delay on rate limit detection
+- **Configurable**: Set `DELAY_BETWEEN_USERS` environment variable to add delays if needed
 
 ### Error Handling
 
@@ -519,6 +541,19 @@ For issues or questions:
 This script is provided as-is for Google Workspace administration purposes.
 
 ## Version History
+
+- **1.2.0** - Performance and UX improvements (Current)
+  - **Added real-time progress monitoring** during GYB backups
+    - Shows message count and percentage every 500 messages
+    - Eliminates silent periods during long backups
+    - Background polling avoids pipeline buffering issues
+  - **Removed rate limiting delay** between users (0 seconds default for maximum speed)
+  - **Switched to Solarized color palette** for improved terminal readability
+    - Cyan INFO messages instead of hard-to-read dark blue
+  - **Fixed TOTAL_USERS display** showing "of 0" (subshell variable scope issue)
+  - **Fixed arithmetic increment errors** with `set -euo pipefail`
+  - **Enhanced user feedback** throughout backup process
+  - Users without Gmail licenses are gracefully skipped with clear messaging
 
 - **1.1.0** - Security hardening release
   - **CRITICAL FIX**: Fixed subshell counter bug (reports now show correct statistics)
