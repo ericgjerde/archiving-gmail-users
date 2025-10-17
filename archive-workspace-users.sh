@@ -98,18 +98,18 @@ SUCCESSFUL_COUNT=0
 FAILED_COUNT=0
 SKIPPED_COUNT=0
 
-# Color codes for output (if terminal supports it)
+# Solarized-inspired color palette for better readability
 if [[ -t 1 ]]; then
-    RED='\033[0;31m'
-    GREEN='\033[0;32m'
-    YELLOW='\033[1;33m'
-    BLUE='\033[0;34m'
-    NC='\033[0m' # No Color
+    RED='\033[0;31m'      # Solarized red for errors
+    GREEN='\033[0;32m'    # Solarized green for success
+    YELLOW='\033[1;33m'   # Solarized yellow for warnings
+    CYAN='\033[1;36m'     # Solarized cyan for info (replaces hard-to-read dark blue)
+    NC='\033[0m'          # No Color
 else
     RED=''
     GREEN=''
     YELLOW=''
-    BLUE=''
+    CYAN=''
     NC=''
 fi
 
@@ -143,7 +143,7 @@ log_message() {
         ERROR)   color="$RED" ;;
         SUCCESS) color="$GREEN" ;;
         WARN)    color="$YELLOW" ;;
-        INFO)    color="$BLUE" ;;
+        INFO)    color="$CYAN" ;;
     esac
 
     # Log to file without color
