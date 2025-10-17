@@ -2,7 +2,7 @@
 
 A comprehensive bash script for automating the archival of Google Workspace users who have been moved to a "FormerEmployees" organizational unit.
 
-**IMPORTANT**: This script uses GAM **ONLY** for read-only user discovery (listing users in the target OU). GAM makes no modifications to your Workspace. Always review the GAM commands in the script to verify read-only operations before running.
+**IMPORTANT**: This script uses GAM **ONLY** for read-only user discovery (listing users in the target OU). GAM makes no modifications to your Workspace. That being said, as a good admin, you should always review usage of GAM commands in the script to verify read-only operations before running. Trust but verify :)
 
 ## Features
 
