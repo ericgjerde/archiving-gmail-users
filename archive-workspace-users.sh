@@ -269,7 +269,7 @@ format_size() {
 
     while (( $(echo "$size_float >= 1024" | bc -l) )) && [[ $unit_index -lt 4 ]]; do
         size_float=$(echo "scale=2; $size_float / 1024" | bc)
-        ((unit_index++))
+        ((unit_index++)) || true
     done
 
     printf "%.2f %s" "$size_float" "${units[$unit_index]}"
@@ -442,7 +442,9 @@ discover_users() {
     fi
 
     # Count users (excluding header line)
-    TOTAL_USERS=$(tail -n +2 "$user_list_file" | wc -l | tr -d ' ')
+    # Use arithmetic to ensure we get a clean integer value
+    TOTAL_USERS=$(tail -n +2 "$user_list_file" | wc -l | tr -d ' \t\n\r')
+    TOTAL_USERS=$((TOTAL_USERS + 0))  # Force integer conversion
 
     if [[ $TOTAL_USERS -eq 0 ]]; then
         log_message "WARN" "No users found in OU: $ou_path"
@@ -490,7 +492,7 @@ confirm_processing() {
     fi
 
     # Require exact OU path confirmation for safety
-    log_message "WARN" "This will archive all users listed above."
+    log_message "WARN" "This will archive Gmail data for all users listed above. This does not delete or modify the accounts in any way."
     read -r -p "Type the exact OU path to confirm: " confirmation
 
     if [[ "$confirmation" != "$ou_path" ]]; then
@@ -538,6 +540,70 @@ check_existing_archive() {
 }
 
 ###
+# monitor_gyb_progress - Monitor GYB backup progress in background
+#
+# Parameters:
+#   $1 - Path to GYB log file to monitor
+#   $2 - User email (for logging)
+#
+# Returns:
+#   None (runs in background)
+###
+monitor_gyb_progress() {
+    local gyb_log="$1"
+    local user_email="$2"
+    local last_reported=0
+    local total_messages=0
+    local discovered=false
+
+    # Wait for log file to be created (up to 10 seconds)
+    local wait_count=0
+    while [[ ! -f "$gyb_log" && $wait_count -lt 20 ]]; do
+        sleep 0.5
+        ((wait_count++)) || true
+    done
+
+    if [[ ! -f "$gyb_log" ]]; then
+        return 0  # Log file never created, exit silently
+    fi
+
+    # Monitor the log file for progress updates
+    tail -f "$gyb_log" 2>/dev/null | while IFS= read -r line; do
+        # Check if GYB has finished (log file will stop being updated)
+        if [[ ! -f "$gyb_log" ]]; then
+            break
+        fi
+
+        # Extract total message count when discovered
+        if [[ ! "$discovered" == "true" ]] && [[ "$line" =~ "GYB needs to backup "([0-9]+)" messages" ]]; then
+            total_messages="${BASH_REMATCH[1]}"
+            if [[ $total_messages -gt 0 ]]; then
+                discovered=true
+                log_message "INFO" "Found $total_messages message(s) to backup for $user_email"
+            fi
+        fi
+
+        # Extract progress from lines like "backed up 500 of 5925 messages"
+        if [[ "$line" =~ "backed up "([0-9]+)" of "([0-9]+)" messages" ]]; then
+            local current="${BASH_REMATCH[1]}"
+            local total="${BASH_REMATCH[2]}"
+
+            # Only report every 500 messages to avoid spam
+            if [[ $((current - last_reported)) -ge 500 ]] || [[ $current -eq $total ]]; then
+                local percent=$((current * 100 / total))
+                log_message "INFO" "Progress: $current/$total messages ($percent%)"
+                last_reported=$current
+
+                # If we've reached the total, stop monitoring
+                if [[ $current -eq $total ]]; then
+                    break
+                fi
+            fi
+        fi
+    done
+}
+
+###
 # backup_user_data - Execute GYB backup for a single user
 #
 # Parameters:
@@ -569,11 +635,19 @@ backup_user_data() {
     # GYB will use its configured service account with domain-wide delegation
     local gyb_log="${LOG_DIR}/gyb_${user_email}_${TIMESTAMP}.log"
 
+    # Start progress monitor in background
+    monitor_gyb_progress "$gyb_log" "$user_email" &
+    local monitor_pid=$!
+
     if $GYB_BIN --email "$user_email" \
                 --service-account \
                 --action backup \
                 --local-folder "$user_temp_dir" \
                 >> "$gyb_log" 2>&1; then
+
+        # Kill the progress monitor (it may have already exited)
+        kill "$monitor_pid" 2>/dev/null || true
+        wait "$monitor_pid" 2>/dev/null || true
 
         log_message "SUCCESS" "GYB backup completed for: $user_email"
 
@@ -589,6 +663,10 @@ backup_user_data() {
 
         return 0
     else
+        # Kill the progress monitor
+        kill "$monitor_pid" 2>/dev/null || true
+        wait "$monitor_pid" 2>/dev/null || true
+
         # Check for mail service not enabled (user has no Gmail license)
         if grep -qi "Mail service not enabled\|failedPrecondition" "$gyb_log"; then
             log_message "WARN" "User $user_email has no Gmail license (mail service not enabled)"
@@ -697,7 +775,7 @@ process_single_user() {
     # Check for existing archive (resume capability)
     if check_existing_archive "$user_email"; then
         log_message "INFO" "Skipping $user_email (already archived)"
-        ((SKIPPED_COUNT++))
+        ((SKIPPED_COUNT++)) || true
         return 0
     fi
 
@@ -708,23 +786,23 @@ process_single_user() {
     if [[ $backup_result -eq 2 ]]; then
         # User has no Gmail license - skip but don't fail
         log_message "INFO" "Skipping $user_email (no Gmail license)"
-        ((SKIPPED_COUNT++))
+        ((SKIPPED_COUNT++)) || true
         return 0
     elif [[ $backup_result -ne 0 ]]; then
         # Actual backup failure
         log_message "ERROR" "Backup failed for: $user_email"
-        ((FAILED_COUNT++))
+        ((FAILED_COUNT++)) || true
         return 1
     fi
 
     # Compress the backup
     if ! compress_backup "$user_email"; then
         log_message "ERROR" "Compression failed for: $user_email"
-        ((FAILED_COUNT++))
+        ((FAILED_COUNT++)) || true
         return 1
     fi
 
-    ((SUCCESSFUL_COUNT++))
+    ((SUCCESSFUL_COUNT++)) || true
     log_message "SUCCESS" "Successfully processed: $user_email"
 
     return 0
@@ -923,11 +1001,11 @@ main() {
             continue
         fi
 
-        ((user_count++))
+        ((user_count++)) || true
         log_message "INFO" "Processing user $user_count of $TOTAL_USERS"
 
         # Process the user
-        process_single_user "$email"
+        process_single_user "$email" || true
 
         # Rate limiting delay (except for last user)
         if [[ $user_count -lt $TOTAL_USERS ]]; then
