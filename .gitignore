@@ -1,0 +1,27 @@
+# Service account credentials - NEVER COMMIT THESE
+*.json
+service-account*.json
+
+# Environment configuration with secrets
+.env
+
+# Archive directories
+archives/
+temp/
+logs/
+reports/
+
+# Temporary files
+*.tmp
+*.temp
+*.csv
+
+# macOS
+.DS_Store
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
