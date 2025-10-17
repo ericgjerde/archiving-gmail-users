@@ -568,7 +568,7 @@ monitor_gyb_progress() {
     fi
 
     # Poll the log file periodically for progress updates
-    # This avoids buffering issues with tail -f in background pipelines
+    # GYB uses carriage returns, so all progress updates are on one line
     while true; do
         # Check if log file still exists (might be removed when done)
         if [[ ! -f "$gyb_log" ]]; then
@@ -584,29 +584,34 @@ monitor_gyb_progress() {
                     total_messages="${BASH_REMATCH[1]}"
                     if [[ $total_messages -gt 0 ]]; then
                         discovered=true
-                        log_message "INFO" "Found $total_messages message(s) to backup for $user_email" >&2
+                        log_message "INFO" "Found $total_messages message(s) to backup for $user_email"
                     fi
                 fi
             fi
         fi
 
-        # Extract latest progress line
-        if grep -q "backed up .* of .* messages" "$gyb_log" 2>/dev/null; then
-            local line
-            line=$(grep "backed up .* of .* messages" "$gyb_log" 2>/dev/null | tail -1)
-            if [[ "$line" =~ "backed up "([0-9]+)" of "([0-9]+)" messages" ]]; then
-                local current="${BASH_REMATCH[1]}"
-                local total="${BASH_REMATCH[2]}"
+        # Extract latest progress - use grep -o to get all matches, then take the last one
+        # GYB writes all progress on one line with carriage returns
+        if grep -q "backed up" "$gyb_log" 2>/dev/null; then
+            local last_progress
+            last_progress=$(grep -o "backed up [0-9]* of [0-9]* messages" "$gyb_log" 2>/dev/null | tail -1)
 
-                # Only report every 500 messages to avoid spam
-                if [[ $((current - last_reported)) -ge 500 ]] || [[ $current -eq $total ]]; then
-                    local percent=$((current * 100 / total))
-                    log_message "INFO" "Progress: $current/$total messages ($percent%)" >&2
-                    last_reported=$current
+            if [[ -n "$last_progress" ]]; then
+                # Parse the numbers from the last progress line
+                if [[ "$last_progress" =~ backed\ up\ ([0-9]+)\ of\ ([0-9]+)\ messages ]]; then
+                    local current="${BASH_REMATCH[1]}"
+                    local total="${BASH_REMATCH[2]}"
 
-                    # If we've reached the total, stop monitoring
-                    if [[ $current -eq $total ]]; then
-                        break
+                    # Only report every 500 messages to avoid spam
+                    if [[ $((current - last_reported)) -ge 500 ]] || [[ $current -eq $total ]]; then
+                        local percent=$((current * 100 / total))
+                        log_message "INFO" "Progress: $current/$total messages ($percent%)"
+                        last_reported=$current
+
+                        # If we've reached the total, stop monitoring
+                        if [[ $current -eq $total ]]; then
+                            break
+                        fi
                     fi
                 fi
             fi
